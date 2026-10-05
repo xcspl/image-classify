@@ -16,6 +16,7 @@ from datetime import date
 from pathlib import Path
 
 from . import model as m
+from .jsonwrite import render_json
 from .okfwrite import Entry, kebab, render
 from .scan import ImageFile, describe_file, find_images, prepare_for_model
 
@@ -25,8 +26,10 @@ CACHE_VERSION = 1
 @dataclass
 class Options:
     root: Path
-    bundle: Path
     cfg: m.ModelConfig
+    formats: tuple[str, ...] = ("okf", "json")  # any of okf, json
+    bundle: Path | None = None  # default: ROOT/okf
+    json_path: Path | None = None  # default: ROOT/image-classify.json
     categories: list[str] = field(default_factory=lambda: list(m.DEFAULT_CATEGORIES))
     workers: int = 4
     max_side: int = 1024
@@ -38,7 +41,7 @@ class Options:
 
 
 class Cache:
-    """`.image-okf/cache.json` beside the images: analyses by sha256, the
+    """`.image-classify/cache.json` beside the images: analyses by sha256, the
     merged tag map, and which tags the merge has already seen."""
 
     def __init__(self, path: Path):
@@ -130,10 +133,12 @@ def consolidate_tags(cache: Cache, opts: Options, counts: Counter) -> int:
 
 def run(opts: Options) -> dict:
     root, log = opts.root.resolve(), opts.log
-    cache = Cache(root / ".image-okf" / "cache.json")
+    bundle = (opts.bundle or root / "okf").resolve()
+    json_path = (opts.json_path or root / "image-classify.json").resolve()
+    cache = Cache(root / ".image-classify" / "cache.json")
     t0 = time.time()
 
-    paths = find_images(root)
+    paths = find_images(root, skip=[bundle])
     log(f"scanning {len(paths)} image files under {root}")
     with ThreadPoolExecutor(max_workers=8) as pool:
         files = list(pool.map(lambda p: describe_file(p, root), paths))
@@ -190,13 +195,17 @@ def run(opts: Options) -> dict:
 
     entries = [Entry(sha, cache.images[sha], fs, cache.tag_map) for sha, fs in present.items()]
     model_names = sorted({e.rec["model"] for e in entries}) or [opts.cfg.model]
-    stats = render(opts.bundle, root, entries, unreadable + failed, ", ".join(model_names))
     result = {
         "files": len(files), "distinct": len(by_sha), "catalogued": len(entries),
         "described_now": done, "failed": len(failed), "unreadable": len(unreadable),
-        "docs_written": stats["written"], "docs_removed": stats["removed"],
-        "seconds": round(time.time() - t0, 1), "bundle": str(opts.bundle),
     }
+    if "okf" in opts.formats:
+        stats = render(bundle, root, entries, unreadable + failed, ", ".join(model_names))
+        result.update({"okf": str(bundle), "docs_written": stats["written"], "docs_removed": stats["removed"]})
+    if "json" in opts.formats:
+        changed = render_json(json_path, root, entries, unreadable + failed)
+        result.update({"json": str(json_path), "json_written": changed})
+    result["seconds"] = round(time.time() - t0, 1)
     return result
 
 

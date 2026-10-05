@@ -11,4 +11,4 @@ handling:
 
 # Decision
 
-* [Design: how image-okf catalogs a library](design.md) - Why one OpenAI-compatible client, content-hash caching, a fixed category list plus merged tags, Asset docs per image, and a deterministic generated bundle.
+* [Design: how image-classify classifies a library](design.md) - Why two wire formats in one client, OKF and JSON as outputs of one cache, content-hash caching, a fixed category list plus merged tags, Asset docs per image, and a deterministic generated bundle.

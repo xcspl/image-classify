@@ -19,9 +19,9 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from image_okf import model as m  # noqa: E402
-from image_okf.pipeline import Options, run  # noqa: E402
-from image_okf.search import search  # noqa: E402
+from image_classify import model as m  # noqa: E402
+from image_classify.pipeline import Options, run  # noqa: E402
+from image_classify.search import records_from_json, records_from_okf, search  # noqa: E402
 
 REPLIES = {
     "beach.jpg": {"title": "Sunset over a sandy beach", "description": "An orange sunset over the sea and a sandy beach.",
@@ -108,7 +108,7 @@ class ImageOkfTest(unittest.TestCase):
 
     def opts(self, **kw):
         cfg = m.ModelConfig(base_url=self.base, model="fake-vl", retries=0)
-        return Options(root=self.tmp, bundle=self.tmp / "okf", cfg=cfg, workers=2, log=lambda *_: None, **kw)
+        return Options(root=self.tmp, cfg=cfg, workers=2, log=lambda *_: None, **kw)
 
     def read(self, rel):
         return (self.tmp / "okf" / rel).read_text()
@@ -168,15 +168,35 @@ class ImageOkfTest(unittest.TestCase):
         self.assertTrue(note.exists())
         self.assertIn("[About](about-this-library.md)", self.read("index.md"))
 
-    def test_search(self):
+    def test_search_both_sources_agree(self):
         run(self.opts())
-        bundle = self.tmp / "okf"
-        hits = search(bundle, "sunset beach")
-        self.assertEqual(hits[0].resource, "beach-copy.jpg")
-        self.assertEqual({h.resource for h in hits}, {"beach-copy.jpg", "dog.webp"})
-        self.assertEqual([h.resource for h in search(bundle, "", tags=["dog"])], ["dog.webp"])
-        self.assertEqual([h.resource for h in search(bundle, "fresh mart")], ["docs/receipt.png"])  # visible text
-        self.assertEqual([h.resource for h in search(bundle, "", sensitive=True)], ["docs/receipt.png"])
+        for src in (lambda: records_from_okf(self.tmp / "okf"), lambda: records_from_json(self.tmp / "image-classify.json")):
+            hits = search(src(), "sunset beach")
+            self.assertEqual(hits[0].path, "beach-copy.jpg")
+            self.assertEqual({h.path for h in hits}, {"beach-copy.jpg", "dog.webp"})
+            self.assertEqual([h.path for h in search(src(), "", tags=["dog"])], ["dog.webp"])
+            self.assertEqual([h.path for h in search(src(), "fresh mart")], ["docs/receipt.png"])  # visible text
+            self.assertEqual([h.path for h in search(src(), "", sensitive=True)], ["docs/receipt.png"])
+
+    def test_json_output(self):
+        res = run(self.opts(formats=("json",)))
+        self.assertFalse((self.tmp / "okf").exists())  # json only: no bundle
+        data = json.loads((self.tmp / "image-classify.json").read_text())
+        self.assertEqual(res["json_written"], True)
+        self.assertEqual(data["counts"]["images"], 3)
+        self.assertEqual(data["counts"]["files"], 4)
+        self.assertEqual(data["counts"]["tags"]["beach"], 2)  # merged
+        beach = next(r for r in data["images"] if r["path"] == "beach-copy.jpg")
+        self.assertEqual(beach["copies"], ["trips/goa/beach.jpg"])
+        self.assertEqual(beach["category"], "landscape")
+        self.assertEqual(beach["taken_at"], "2024-12-24T18:05:00")
+        self.assertEqual([n["path"] for n in data["not_catalogued"]], ["broken.jpg"])
+        self.assertFalse(run(self.opts(formats=("json",)))["json_written"])  # deterministic: unchanged
+
+    def test_okf_only_writes_no_json(self):
+        run(self.opts(formats=("okf",)))
+        self.assertTrue((self.tmp / "okf" / "index.md").exists())
+        self.assertFalse((self.tmp / "image-classify.json").exists())
 
     def test_anthropic_format(self):
         o = self.opts()

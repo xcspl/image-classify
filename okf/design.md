@@ -1,17 +1,17 @@
 ---
 type: Decision
-title: "Design: how image-okf catalogs a library"
-description: Why one OpenAI-compatible client, content-hash caching, a fixed category list plus merged tags, Asset docs per image, and a deterministic generated bundle.
-tags: [image-okf, design, okf, vision-model, catalog]
+title: "Design: how image-classify classifies a library"
+description: Why two wire formats in one client, OKF and JSON as outputs of one cache, content-hash caching, a fixed category list plus merged tags, Asset docs per image, and a deterministic generated bundle.
+tags: [image-classify, design, okf, vision-model, catalog]
 timestamp: '2026-10-05'
 status: active
 sources:
-  - resource: ../image_okf/pipeline.py
-  - resource: ../image_okf/okfwrite.py
-  - resource: ../image_okf/model.py
+  - resource: ../image_classify/pipeline.py
+  - resource: ../image_classify/okfwrite.py
+  - resource: ../image_classify/model.py
 ---
 
-# Design: how image-okf catalogs a library
+# Design: how image-classify classifies a library
 
 **The goal.** An agent should find an image by what is in it — "the receipt
 from the Goa trip" — by reading a few small text files, never by opening
@@ -28,7 +28,7 @@ Plain `urllib`, no SDK: the provider is two settings, and a fully local run
 (Ollama) needs no key. `<think>` blocks and code fences are stripped before
 the JSON is read, because reasoning models wrap their answers.
 
-**Cache by content hash, not by path.** `.image-okf/cache.json` beside the
+**Cache by content hash, not by path.** `.image-classify/cache.json` beside the
 images maps sha256 → analysis. A moved or renamed file is a path update with
 no model call; duplicates share one doc (`file.copies`); a stopped run
 resumes. The doc's slug (`<file-stem>-<sha6>`) is fixed at first analysis,
@@ -41,10 +41,16 @@ text-only pass over the whole vocabulary asks the model to merge synonyms;
 the merge map is cached and applied at render time, never written into the
 analyses, so it can be redone.
 
+**Outputs are views of one cache.** The cache is the source of truth; the
+OKF bundle (for agents, navigable by index) and the JSON file (for programs,
+one read) are both rendered from it, so `--format` can change between runs
+without re-describing anything, and `search` reads whichever exists (JSON
+first). Named image-classify, not image-okf, because OKF is one output.
+
 **The bundle is generated and deterministic.** Rendered from the cache alone,
 timestamps are analysis dates (not run dates), and files are rewritten only
 when their content changes — an unchanged library rewrites nothing and diffs
-cleanly in git. Every generated file carries `generator: image-okf`; cleanup
+cleanly in git. Every generated file carries `generator: image-classify`; cleanup
 removes only those, so hand-written docs at the bundle root survive and are
 listed under `# Notes`.
 

@@ -23,8 +23,9 @@ except Exception:  # pragma: no cover - depends on the environment
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff"} | (
     {".heic", ".heif"} if HEIF else set()
 )
-# Directories never scanned: the bundle we write, our cache, and the usual noise.
-SKIP_DIRS = {"okf", ".image-okf", ".git", "node_modules", "__pycache__", ".thumbnails", "@eaDir"}
+# Directories never scanned: the default bundle, our cache, and the usual noise
+# (a bundle written elsewhere inside the root is skipped by path).
+SKIP_DIRS = {"okf", ".image-classify", ".git", "node_modules", "__pycache__", ".thumbnails", "@eaDir"}
 
 
 @dataclass
@@ -43,10 +44,12 @@ class ImageFile:
     extra: dict = field(default_factory=dict)
 
 
-def find_images(root: Path) -> list[Path]:
+def find_images(root: Path, skip: list[Path] = ()) -> list[Path]:
+    skip_abs = {Path(p).resolve() for p in skip}
     out: list[Path] = []
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS and not d.startswith("."))
+        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")
+                             and (Path(dirpath) / d).resolve() not in skip_abs)
         for name in sorted(filenames):
             if Path(name).suffix.lower() in IMAGE_EXTS and not name.startswith("."):
                 out.append(Path(dirpath) / name)
