@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "image-okf"
+version = "0.1.0"
+description = "Catalog a directory of images into an OKF knowledge bundle with a multimodal model, so agents can find images by what is in them."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = ["pillow>=10", "pyyaml>=6"]
+
+[project.optional-dependencies]
+heic = ["pillow-heif>=0.16"]
+
+[project.scripts]
+image-okf = "image_okf.cli:main"
+
+[tool.setuptools]
+packages = ["image_okf"]
