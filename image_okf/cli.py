@@ -19,8 +19,9 @@ def _cfg(a) -> m.ModelConfig:
     base = a.base_url or os.environ.get("IMAGE_OKF_BASE_URL") or m.DEFAULT_BASE_URL
     key = os.environ.get(a.api_key_env) if a.api_key_env else None
     key = key or os.environ.get("IMAGE_OKF_API_KEY") or (os.environ.get("MINIMAX_API_KEY") if "minimax" in base else None) or ""
+    fmt = a.api_format or os.environ.get("IMAGE_OKF_API_FORMAT") or m.guess_format(base)
     return m.ModelConfig(base_url=base, api_key=key, model=a.model or os.environ.get("IMAGE_OKF_MODEL") or m.DEFAULT_MODEL,
-                         timeout=a.timeout)
+                         timeout=a.timeout, api_format=fmt)
 
 
 def cmd_index(a) -> int:
@@ -72,6 +73,8 @@ def main(argv: list[str] | None = None) -> int:
     i.add_argument("--out", help="bundle directory (default: DIR/okf)")
     i.add_argument("--model", help=f"model id (default: $IMAGE_OKF_MODEL or {m.DEFAULT_MODEL})")
     i.add_argument("--base-url", help=f"OpenAI-compatible base URL (default: $IMAGE_OKF_BASE_URL or {m.DEFAULT_BASE_URL})")
+    i.add_argument("--api-format", choices=["openai", "anthropic"],
+                   help="wire format: openai (/chat/completions) or anthropic (/messages); default: guessed from the URL")
     i.add_argument("--api-key-env", help="name of the env var holding the key (default: IMAGE_OKF_API_KEY, then MINIMAX_API_KEY)")
     i.add_argument("--workers", type=int, default=4, help="parallel model calls (default 4)")
     i.add_argument("--max-side", type=int, default=1024, help="long edge sent to the model, px (default 1024)")

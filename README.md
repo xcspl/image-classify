@@ -75,18 +75,22 @@ it any time; it picks up where it left off.
 
 ## Any vision model
 
-It speaks the OpenAI-compatible chat API, so the model is a setting:
+It speaks both common wire formats — OpenAI-style chat completions and the
+Anthropic-style Messages API (`--api-format`, guessed from the URL) — so the
+model is a setting:
 
 | Provider | `--base-url` | `--model` |
 |---|---|---|
 | MiniMax (default) | `https://api.minimax.io/v1` | `MiniMax-M3`, `MiniMax-M3.1-Flash-Preview` |
+| MiniMax, Messages API | `https://api.minimax.io/anthropic/v1` | same |
+| [llmagento](https://llmagento.com) proxy | `https://llmagento.com/v1` or `https://llmagento.com/anthropic/v1` | your alias for a vision model; the key is a proxy token |
 | OpenRouter | `https://openrouter.ai/api/v1` | any model with image input |
 | Ollama, fully local | `http://localhost:11434/v1` | e.g. `qwen2.5vl:7b` (no key needed) |
-| Any OpenAI-compatible gateway | its `/v1` URL | its model name |
+| Any OpenAI- or Anthropic-compatible gateway | its base URL | its model name |
 
 The key comes from `IMAGE_OKF_API_KEY` (or `MINIMAX_API_KEY` for MiniMax,
-or any variable you name with `--api-key-env`). `IMAGE_OKF_BASE_URL` and
-`IMAGE_OKF_MODEL` set the defaults.
+or any variable you name with `--api-key-env`). `IMAGE_OKF_BASE_URL`,
+`IMAGE_OKF_MODEL` and `IMAGE_OKF_API_FORMAT` set the defaults.
 
 **Privacy:** with a hosted model, every image is uploaded (downscaled to
 1024 px on the long side; `--max-side` changes it). For a private library,

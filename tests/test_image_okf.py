@@ -39,6 +39,7 @@ REPLIES = {
 
 class FakeLLM(BaseHTTPRequestHandler):
     calls: list = []
+    paths: list = []
 
     def log_message(self, *a):
         pass
@@ -46,15 +47,24 @@ class FakeLLM(BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         FakeLLM.calls.append(body)
+        FakeLLM.paths.append(self.path)
+        anthropic = self.path.endswith("/messages")
         content = body["messages"][0]["content"]
         if isinstance(content, str):  # the tag-merge pass
             reply = '<think>plural</think>```json\n{"beaches": "beach", "sunset": "sunset"}\n```'
         else:
             text = next(p["text"] for p in content if p["type"] == "text")
-            assert content[0]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+            if anthropic:
+                assert self.headers["anthropic-version"] and content[0]["source"]["media_type"] == "image/jpeg"
+            else:
+                assert content[0]["image_url"]["url"].startswith("data:image/jpeg;base64,")
             name = next(n for n in REPLIES if f"file name: {n.split('.')[0]}" in text)
             reply = "<think>looking</think>Here you go: " + json.dumps(REPLIES[name])
-        out = json.dumps({"choices": [{"message": {"role": "assistant", "content": reply}}]}).encode()
+        if anthropic:
+            out = json.dumps({"type": "message", "content": [{"type": "thinking", "thinking": "{\"no\": 1}"},
+                                                            {"type": "text", "text": reply}]}).encode()
+        else:
+            out = json.dumps({"choices": [{"message": {"role": "assistant", "content": reply}}]}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(out)))
@@ -89,6 +99,7 @@ class ImageOkfTest(unittest.TestCase):
 
     def setUp(self):
         FakeLLM.calls.clear()
+        FakeLLM.paths.clear()
         self.tmp = Path(tempfile.mkdtemp())
         make_library(self.tmp)
 
@@ -166,6 +177,14 @@ class ImageOkfTest(unittest.TestCase):
         self.assertEqual([h.resource for h in search(bundle, "", tags=["dog"])], ["dog.webp"])
         self.assertEqual([h.resource for h in search(bundle, "fresh mart")], ["docs/receipt.png"])  # visible text
         self.assertEqual([h.resource for h in search(bundle, "", sensitive=True)], ["docs/receipt.png"])
+
+    def test_anthropic_format(self):
+        o = self.opts()
+        o.cfg.api_format = "anthropic"
+        res = run(o)
+        self.assertEqual(res["catalogued"], 3)
+        self.assertTrue(FakeLLM.paths and all(p == "/v1/messages" for p in FakeLLM.paths))
+        self.assertIn("\n- beach\n", next((self.tmp / "okf" / "landscape").glob("beach-*.md")).read_text())
 
     def test_dry_run_sends_nothing(self):
         res = run(self.opts(dry_run=True))

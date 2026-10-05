@@ -18,7 +18,10 @@ from the Goa trip" — by reading a few small text files, never by opening
 images. So the output is an OKF bundle of one doc per image, and every
 choice below serves search by a later agent.
 
-**One client, OpenAI-compatible chat.** MiniMax's vision models (M3,
+**One client, two wire formats.** OpenAI-style chat completions by default;
+the Anthropic-style Messages API with `--api-format anthropic` (guessed when
+the URL says `anthropic`), because gateways such as llmagento serve a model on
+the format its endpoint is declared with and never translate bodies. MiniMax's vision models (M3,
 M3.1-Flash) take images as `image_url` content parts on the OpenAI-compatible
 endpoint, and so do OpenRouter, Ollama's `/v1`, and gateways like llmhub.
 Plain `urllib`, no SDK: the provider is two settings, and a fully local run

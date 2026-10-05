@@ -39,27 +39,62 @@ class ModelConfig:
     timeout: float = 120.0
     retries: int = 4
     max_tokens: int = 4000  # room for reasoning models to think before the JSON
+    api_format: str = "openai"  # or "anthropic" (Messages API: Anthropic, MiniMax, llmagento's /anthropic/v1)
+
+
+def guess_format(base_url: str) -> str:
+    return "anthropic" if "anthropic" in base_url.lower() else "openai"
+
+
+def _to_anthropic(messages: list[dict]) -> list[dict]:
+    """OpenAI-style messages (text and data-URI image_url parts) as Messages API content blocks."""
+    out = []
+    for msg in messages:
+        content = msg["content"]
+        if isinstance(content, str):
+            out.append({"role": msg["role"], "content": content})
+            continue
+        blocks = []
+        for part in content:
+            if part.get("type") == "image_url":
+                url = part["image_url"]["url"]
+                head, data = url.split(",", 1)
+                media = head[len("data:"):].split(";")[0] or "image/jpeg"
+                blocks.append({"type": "image", "source": {"type": "base64", "media_type": media, "data": data}})
+            elif part.get("type") == "text":
+                blocks.append({"type": "text", "text": part["text"]})
+        out.append({"role": msg["role"], "content": blocks})
+    return out
 
 
 def chat(cfg: ModelConfig, messages: list[dict], *, max_tokens: int | None = None) -> str:
     """One non-streamed completion; returns the visible text. Retries
     429/5xx/network errors with jittered backoff, honouring Retry-After."""
-    url = cfg.base_url.rstrip("/") + "/chat/completions"
+    anthropic = cfg.api_format == "anthropic"
+    url = cfg.base_url.rstrip("/") + ("/messages" if anthropic else "/chat/completions")
     body = json.dumps({
         "model": cfg.model,
-        "messages": messages,
+        "messages": _to_anthropic(messages) if anthropic else messages,
         "max_tokens": max_tokens or cfg.max_tokens,
         "temperature": 0.2,
     }).encode()
     headers = {"Content-Type": "application/json"}
+    if anthropic:
+        headers["anthropic-version"] = "2023-06-01"
     if cfg.api_key:
         headers["Authorization"] = f"Bearer {cfg.api_key}"
+        if anthropic:
+            headers["x-api-key"] = cfg.api_key
     last: Exception | None = None
     for attempt in range(cfg.retries + 1):
         req = urllib.request.Request(url, data=body, headers=headers, method="POST")
         try:
             with urllib.request.urlopen(req, timeout=cfg.timeout) as resp:
                 data = json.loads(resp.read())
+            if anthropic:  # thinking blocks are skipped; only text blocks are the answer
+                if data.get("type") == "error":
+                    raise ModelError(500, f"provider error: {data.get('error')}")
+                return "".join(b.get("text", "") for b in data.get("content") or [] if b.get("type") == "text")
             choice = (data.get("choices") or [{}])[0]
             text = (choice.get("message") or {}).get("content") or ""
             if isinstance(text, list):  # some providers return content parts

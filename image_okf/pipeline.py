@@ -149,7 +149,7 @@ def run(opts: Options) -> dict:
     if opts.limit is not None:
         todo = todo[: opts.limit]
     log(f"{len(by_sha)} distinct images, {len(by_sha) - len(todo) if not opts.reanalyze else 0} already catalogued, "
-        f"{len(todo)} to describe with {opts.cfg.model} at {opts.cfg.base_url}")
+        f"{len(todo)} to describe with {opts.cfg.model} at {opts.cfg.base_url} ({opts.cfg.api_format})")
     if opts.dry_run:
         for f in todo:
             log(f"  would send {f.rel}")
